@@ -159,7 +159,7 @@ async function profilesPathFunction(m) {
     },
     'ID': {
       value: profileUser.id,
-      icon: 'https://img.icons8.com/material-rounded/32/data-.png'
+      icon: 'https://img.icons8.com/material-outlined/512/identification-documents.png'
     },
     'Favorite food': {
       value: xlUser.favoriteFood,
