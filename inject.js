@@ -10,9 +10,10 @@ console.debug('[XL] Got SID:', hasSid);
 // Different RegExes for paths
 const profilesPathRegex = /^\/@([^/]+)\/?$/;
 const replsPathRegex = /^\/@([^\/]+)\/([\w\-]+)(#.*)?(?!\?v=1)$/;
+const replSpotlightPathRegex = /^\/@([^\/]+)\/([\w\-]+)\?v=1(#.*)?$/;
 
 // URL consts
-const BACKEND = 'https://xl-replit-backend.luisafk.repl.co';
+const BACKEND = 'https://xl-replit.lafkpages.tech';
 
 // Fire URL change events
 (() => {
@@ -79,6 +80,18 @@ async function getReplByURL(url) {
   );
 }
 
+async function getReadOnlyReplByURL(url) {
+  return await graphQl('getReplDataReadOnly', {
+    url
+  });
+}
+
+async function tipCycles(amount, replId) {
+  return await graphQl('tipCycles', {
+    amount, replId
+  });
+}
+
 function capitalize(str) {
   str = str.split('');
 
@@ -95,10 +108,11 @@ async function profilesPathFunction(m) {
   const profileUsername = m[1];
 
   // Prevent this from running twice
-  if (document.body.dataset.xlReplitProfiles == profileUsername) {
+  const xlReplitPage = `profiles/${profileUsername}`;
+  if (document.body.dataset.xlReplitPage == xlReplitPage) {
     return console.log('[XL] XL Replit Profiles are already setup for this profile, ignoring call');
   }
-  document.body.dataset.xlReplitProfiles = profileUsername;
+  document.body.dataset.xlReplitPage = xlReplitPage;
   
   console.log('[XL] Loading XL Replit profile for user', profileUsername);
 
@@ -251,10 +265,11 @@ async function replsPathFunction(m) {
   let replSlug = m[2];
 
   // Prevent this from running twice
-  if (document.body.dataset.xlReplitRepl == replSlug) {
+  const xlReplitPage = `repls/${replSlug}`;
+  if (document.body.dataset.xlReplitPage == xlReplitPage) {
     return console.log('[XL] XL Replit Repl already ran on this Repl, ignoring call');
   }
-  document.body.dataset.xlReplitRepl = replSlug;
+  document.body.dataset.xlReplitPage = xlReplitPage;
   console.log('[XL] Loading XL Replit data for Repl', replSlug);
 
   // Load Repl data
@@ -293,6 +308,12 @@ async function replsPathFunction(m) {
       readOnlySelect.appendChild(readOnlySelectReadOnlyOpt);
       inviteForm.insertBefore(readOnlySelect, inviteFormBtn);
 
+      // Disable read-only if no SID provided
+      if (!hasSid) {
+        readOnlySelectReadOnlyOpt.disabled = true;
+        readOnlySelect.title = 'Read only is disabled as you have not provided your Replit SID to the extension. To use this feature, open the extension popup and paste your Replit SID in there.';
+      }
+
       // Prevent default invite action if read-only
       inviteFormBtn.addEventListener('click', e => {
         const mode = readOnlySelect.value;
@@ -310,9 +331,105 @@ async function replsPathFunction(m) {
   });
 }
 
+async function replSpotlightPathFunction(m) {
+  let replSlug = m[2];
+
+  // Prevent this from running twice
+  const xlReplitPage = `replSpotlight/${replSlug}`;
+  if (document.body.dataset.xlReplitPage == xlReplitPage) {
+    return console.log('[XL] XL Replit Repl Spotlight already ran on this Repl, ignoring call');
+  }
+  document.body.dataset.xlReplitPage = xlReplitPage;
+
+  // Load read-only Repl data
+  const repl = (await getReadOnlyReplByURL(m[0])).data.repl;
+  replSlug = repl.slug;
+
+  const tipsCont = document.querySelector('div#tips');
+  const tipButtonsCont = tipsCont.querySelector('div:has(> div:nth-child(3))');
+
+  // Add classes for CSS
+  tipButtonsCont.classList.add('xl-replit-tip-buttons-cont');
+  tipButtonsCont.parentElement.children[1].classList.add('xl-replit-tip-data-cont');
+
+  // Add custom tip button
+  const customTipBtn = document.createElement('button');
+  const customTipBtnEmoji = document.createElement('span');
+  const customTipBtnText = document.createElement('span');
+  customTipBtnEmoji.textContent = '\u{1F300}';
+  customTipBtnText.textContent = 'Custom Tip';
+  customTipBtn.id = 'xl-replit-custom-tip-btn';
+  customTipBtn.appendChild(customTipBtnEmoji);
+  customTipBtn.appendChild(customTipBtnText);
+  tipButtonsCont.appendChild(customTipBtn);
+
+  // Add custom tip popup
+  const customTipPopupCont = document.createElement('div');
+  const customTipPopup = document.createElement('form');
+  const customTipPopupTitle = document.createElement('h2');
+  const customTipPopupInp = document.createElement('input');
+  const customTipPopupBtnsCont = document.createElement('div');
+  const customTipPopupCancel = document.createElement('button');
+  const customTipPopupSubmit = document.createElement('button');
+  customTipPopupCont.id = 'xl-replit-custom-tip-popup-cont';
+  customTipPopup.id = 'xl-replit-custom-tip-popup';
+  customTipPopupTitle.textContent = 'Custom Tip';
+  customTipPopupInp.placeholder = 'Amount of cycles...';
+  customTipPopupInp.type = 'number';
+  customTipPopupInp.min = 10;
+  customTipPopupInp.value = 10;
+  customTipPopupInp.required = true;
+  customTipPopupCancel.textContent = 'Cancel';
+  customTipPopupSubmit.textContent = 'Tip!';
+  customTipPopupSubmit.className = 'primary';
+  customTipPopupBtnsCont.appendChild(customTipPopupCancel);
+  customTipPopupBtnsCont.appendChild(customTipPopupSubmit);
+  customTipPopup.appendChild(customTipPopupTitle);
+  customTipPopup.appendChild(customTipPopupInp);
+  customTipPopup.appendChild(customTipPopupBtnsCont);
+  customTipPopupCont.appendChild(customTipPopup);
+  document.body.appendChild(customTipPopupCont);
+
+  // When custom tip is clicked
+  customTipBtn.addEventListener('click', e => {
+    // Show custom tip popup
+    customTipPopupCont.classList.add('show');
+  });
+
+  // When cancel button is clicked
+  customTipPopupCancel.addEventListener('click', e => {
+    // Close the popup
+    customTipPopupCont.classList.remove('show');
+  });
+
+  // When the tip button is clicked
+  customTipPopup.addEventListener('submit', e => {
+    // Disable buttons
+    customTipPopupCancel.disabled = true;
+    customTipPopupSubmit.disabled = true;
+
+    // Send tip
+    tipCycles(customTipPopupInp.valueAsNumber, repl.id).then(result => {
+      // Enable buttons
+      customTipPopupCancel.disabled = false;
+      customTipPopupSubmit.disabled = false;
+
+      // Hide popup
+      customTipPopupCont.classList.remove('show');
+
+      // Reload to update tip data
+      window.location.search = '?v=1';
+      window.location.reload();
+    });
+  });
+}
+
 function main() {
-  const profilesPathMatch = window.location.pathname.match(profilesPathRegex);
-  const replsPathMatch = window.location.pathname.match(replsPathRegex);
+  const path = window.location.pathname + window.location.search + window.location.hash;
+
+  const profilesPathMatch = path.match(profilesPathRegex);
+  const replsPathMatch = path.match(replsPathRegex);
+  const replSpotlightPathMatch = path.match(replSpotlightPathRegex);
 
   console.debug('[XL] Running main');
 
@@ -320,6 +437,8 @@ function main() {
     return profilesPathFunction(profilesPathMatch);
   } else if (replsPathMatch) {
     return replsPathFunction(replsPathMatch);
+  } else if (replSpotlightPathMatch) {
+    return replSpotlightPathFunction(replSpotlightPathMatch);
   }
 }
 
